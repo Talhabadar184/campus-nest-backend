@@ -121,7 +121,7 @@ const { verifyJWT } = require("./middlewares/auth.middleware.js");
 const app = express();
 
 // CORS allowed origins
-const allowedOrigins = ["http://localhost:5173", "http://localhost:3000","https://campus-nest-backend-x519.onrender.com/"];
+const allowedOrigins = ["http://localhost:5173", "http://localhost:3000","https://campusnest-one.vercel.app/"];
 
 // Middleware
 app.use(
