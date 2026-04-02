@@ -213,16 +213,12 @@
 
 // module.exports = server;
 const express = require("express");
-const http = require("http");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 dotenv.config();
 
-const { Server } = require("socket.io");
-
-// Models & Routes
-const Chat = require("./models/chat.model");
+// Routes
 const chatRoutes = require("./routes/chat.routes");
 const userRouter = require("./routes/user.routes");
 const searchHostelRoutes = require("./routes/search-hostel.routes.js");
@@ -234,8 +230,6 @@ const dashboardRoutes = require("./routes/dashboard.routes.js");
 const hostelprofileRoutes = require("./routes/hostel.routes.js");
 const geocodeRoutes = require("./routes/geocode.routes.js");
 
-const { connectDB } = require("./db/index.js");
-
 const app = express();
 
 // ✅ Allowed Origins
@@ -245,7 +239,7 @@ const allowedOrigins = [
   "https://campusnest-one.vercel.app",
 ];
 
-// ✅ Global Middleware (ONLY ONCE)
+// ✅ Middleware
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -259,12 +253,11 @@ app.use(
   })
 );
 
-app.use(express.json()); // ✅ FIXED
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static("public"));
 app.use(cookieParser());
 
-// ✅ Routes (CLEAN STRUCTURE)
+// ✅ Routes
 app.use("/api/auth", userRouter);
 app.use("/api/chats", chatRoutes);
 app.use("/api/search-hostel", searchHostelRoutes);
@@ -276,60 +269,4 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/hostel-profile", hostelprofileRoutes);
 app.use("/api/geocode", geocodeRoutes);
 
-// ✅ Server & Socket
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-  },
-});
-
-// ✅ SOCKET LOGIC
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  socket.on("joinRoom", ({ roomId }) => {
-    socket.join(roomId);
-    console.log(`Joined room: ${roomId}`);
-  });
-
-  socket.on("sendMessage", async (data) => {
-    const { roomId, senderId, receiverId, message } = data;
-
-    // Emit
-    io.to(roomId).emit("receiveMessage", data);
-
-    // Save to DB
-    try {
-      let chat = await Chat.findOne({ roomId });
-
-      const newMessage = { senderId, receiverId, message };
-
-      if (chat) {
-        chat.messages.push(newMessage);
-      } else {
-        chat = new Chat({ roomId, messages: [newMessage] });
-      }
-
-      await chat.save();
-      console.log("Message saved");
-    } catch (err) {
-      console.error("DB Error:", err);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
-});
-
-// ✅ Connect DB & Start Server
-connectDB().then(() => {
-  server.listen(process.env.PORT || 5000, () => {
-    console.log("Server running...");
-  });
-});
-
-module.exports = server;
+module.exports = app;
