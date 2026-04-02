@@ -1,58 +1,64 @@
-const express = require("express");
-const cors = require("cors");
-const cookieParser = require("cookie-parser");
+const http = require("http");
 const dotenv = require("dotenv");
+const { Server } = require("socket.io");
+
+const app = require("./src/app.js");
+const { connectDB } = require("./src/db/index.js");
+const Chat = require("./src/models/chat.model");
+
 dotenv.config();
 
-// Routes
-const chatRoutes = require("./routes/chat.routes");
-const userRouter = require("./routes/user.routes");
-const searchHostelRoutes = require("./routes/search-hostel.routes.js");
-const registerHostelRoutes = require("./routes/register-hostel.routes.js");
-const compareHostelRoutes = require("./routes/compare-hostel.routes.js");
-const bookingRoutes = require("./routes/booking.routes.js");
-const feedbackRoutes = require("./routes/feedback.routes.js");
-const dashboardRoutes = require("./routes/dashboard.routes.js");
-const hostelprofileRoutes = require("./routes/hostel.routes.js");
-const geocodeRoutes = require("./routes/geocode.routes.js");
+const server = http.createServer(app);
 
-const app = express();
+// ✅ Socket Setup
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://campusnest-one.vercel.app",
+    ],
+    methods: ["GET", "POST"],
+  },
+});
 
-// ✅ Allowed Origins
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "https://campusnest-one.vercel.app",
-];
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
 
-// ✅ Middleware
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
+  socket.on("joinRoom", ({ roomId }) => {
+    socket.join(roomId);
+  });
+
+  socket.on("sendMessage", async (data) => {
+    const { roomId, senderId, receiverId, message } = data;
+
+    io.to(roomId).emit("receiveMessage", data);
+
+    try {
+      let chat = await Chat.findOne({ roomId });
+
+      const newMessage = { senderId, receiverId, message };
+
+      if (chat) {
+        chat.messages.push(newMessage);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        chat = new Chat({ roomId, messages: [newMessage] });
       }
-    },
-    credentials: true,
+
+      await chat.save();
+    } catch (err) {
+      console.error("DB Error:", err);
+    }
+  });
+});
+
+// ✅ START SERVER ONLY HERE
+connectDB()
+  .then(() => {
+    server.listen(process.env.PORT || 8000, () => {
+      console.log(`🚀 Server running on port ${process.env.PORT || 8000}`);
+    });
   })
-);
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-// ✅ Routes
-app.use("/api/auth", userRouter);
-app.use("/api/chats", chatRoutes);
-app.use("/api/search-hostel", searchHostelRoutes);
-app.use("/api/register-hostel", registerHostelRoutes);
-app.use("/api/compare-hostel", compareHostelRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/feedback", feedbackRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/hostel-profile", hostelprofileRoutes);
-app.use("/api/geocode", geocodeRoutes);
-
-module.exports = app;
+  .catch((err) => {
+    console.log("DB connection failed", err);
+  });
